@@ -1,0 +1,27 @@
+[calculator]
+name:                          calculator
+module:                        glp.vibes
+
+[calculator.parameters.calculator]
+calculator:                     atom_pair
+skin:                           0.5
+heat_flux:                      True
+
+[calculator.parameters.potential]
+potential:                      lennard_jones
+sigma:                          3.405
+epsilon:                        0.01042
+cutoff:                         9.0
+onset:                          8.0
+
+[md]
+driver:                        VelocityVerlet
+timestep:                      4
+maxsteps:                      25
+compute_stresses:              False
+
+
+[files]
+geometry:                      geometry.in
+primitive:                     geometry.in.primitive
+supercell:                     geometry.in.supercell

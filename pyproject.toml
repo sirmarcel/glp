@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "glp"
+version = "0.1.0"
+description = "forces, stress and heat flux for graph machine learning potentials"
+authors = ["Marcel Langer <dev@marcel.science>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = ">=3.7"
+jax-md = ">=0.2.5"
+comms = { git = "https://github.com/sirmarcel/comms.git", branch = "main" }
+specable = "*"
+numpy = "*"
+ase = { git = "https://gitlab.com/ase/ase.git", branch = "master", optional = true }
+fhi-vibes = { git = "https://gitlab.com/vibes-developers/vibes.git", branch = "master" , optional = true}
+# mlff = { git = "https://github.com/thorben-frank/mlff", branch = "v1.0", optional = true}
+
+[tool.poetry.extras]
+ase = ["ase"]
+vibes = ["fhi-vibes"]
+# mlff = ["mlff"]
+full = ["ase", "fhi-vibes"]
+
+[tool.poetry.dev-dependencies]
+fhi-vibes = { git = "https://gitlab.com/vibes-developers/vibes.git", branch = "master"}
+pytest = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

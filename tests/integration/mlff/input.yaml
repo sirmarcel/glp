@@ -1,0 +1,10 @@
+dynamics:
+  verlet:
+    dt: 1.0
+potential:
+  mlff:
+    folder: "so3krates_SnSe"
+calculator:
+  atom_pair: {}
+files:
+  start: geometry.in
