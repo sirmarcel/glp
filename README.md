@@ -18,6 +18,8 @@ If you use this code in an academic context, please cite this preprint. If you u
 
 **`glp` is a fairly early-stage code. There is not stable release cycle yet!**
 
+See also: [`gkx`](https://github.com/sirmarcel/gkx), which implements the remaining parts for a fully `jax`-based Green-Kubo workflow.
+
 ## Features
 
 Once you supply a `Potential` with the required interface (see below), `glp` gives you:
@@ -222,6 +224,12 @@ git clone git@github.com:thorben-frank/mlff.git
 cd mlff
 pip install -e .
 ```
+
+## Units and Conventions
+
+`glp` is essentially unit agnostic, it simply manipulates numbers as given. The `dynamics` module assumes everything is in `ase` units, so the timestep is in `ase.units.fs`. For compatibility with `ase`, it is best to stick to Ångstrom for distances and eV for energies.
+
+Stress and heat flux are internally computed *without* dividing by the volume, but the standard convention is enforced in the `ase` calculator, where we also convert the heat flux to being in SI-ps instead of `ase`-fs, in line with the `FHI-vibes` conventions. To circumenvent all such processing, the `raw=True` argument can be passed.
 
 ## What about `jax-md`?
 
