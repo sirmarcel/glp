@@ -5,13 +5,13 @@
 
 In a nutshell: If you provide a function that maps a `Graph` of atom-pair vectors to atomic potential `energies`, `glp` takes care of everything else. ✨
 
-With `glp`, we aim to make it straightforward to go from implementing a new machine-learning potential to using it for moderate-sized production runs (thousands of atoms, nanoseconds of MD). `glp` also serves as an illustration of implementations of stress with automatic differentiation. It was written to support the following manuscript:
+With `glp`, we aim to make it straightforward to go from implementing a new machine-learning potential to using it for moderate-sized production runs (thousands of atoms, nanoseconds of MD). `glp` also serves as an illustration of implementations of stress with automatic differentiation. It was written to support the following [manuscript](https://arxiv.org/abs/2305.01401):
 
 ```
 Stress and heat flux via automatic differentiation
 by Marcel F. Langer, J. Thorben Frank, and Florian Knoop
 
-arXiv: TBD
+arXiv:2305.01401
 ```
 
 If you use this code in an academic context, please cite this preprint. If you use the heat flux, please also cite [this other preprint](https://arxiv.org/abs/2303.14434). 🙏
