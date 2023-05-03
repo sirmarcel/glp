@@ -52,7 +52,11 @@ def calculator(potential, system, skin=0.0, n_replicas=2, capacity_multiplier=1.
         Calculator(
             calculator_fn,
             lambda sys: calculator(
-                potential, sys, skin=skin, capacity_multiplier=capacity_multiplier
+                potential,
+                sys,
+                skin=skin,
+                capacity_multiplier=capacity_multiplier,
+                n_replicas=n_replicas,
             ),
         ),
         init_state,

@@ -137,6 +137,7 @@ def calculator(
                 skin=skin,
                 skin_unfolder=skin_unfolder,
                 capacity_multiplier=capacity_multiplier,
+                stress_mode=stress_mode,
             ),
         ),
         state,

@@ -33,9 +33,7 @@ def calculator(
         state = update_neighbors(system, state)
 
         strain = get_strain(dtype=system.R.dtype)
-        energy, grads_and_stress = energies_and_derivatives_fn(
-            system, strain, state
-        )
+        energy, grads_and_stress = energies_and_derivatives_fn(system, strain, state)
         grads, stress = grads_and_stress
 
         forces = -grads.R
@@ -52,7 +50,6 @@ def calculator(
                 system,
                 skin=skin,
                 capacity_multiplier=capacity_multiplier,
-                stress_mode=stress_mode,
             ),
         ),
         state,
