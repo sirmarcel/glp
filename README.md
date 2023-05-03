@@ -124,7 +124,7 @@ It's often inconvenient to keep track of all the arguments, so in some places, a
 
 An overview of available calculators is given in [here](https://github.com/sirmarcel/glp/tree/main/glp/calculators). In general, we recommend:
 
-- [`atom_pair`](https://github.com/sirmarcel/glp/blob/main/glp/calculators/atom_pair.py) for energy, forces, stress (equivalent to [`end_to_end`](https://github.com/sirmarcel/glp/blob/main/glp/calculators/end_to_end.py)
+- [`atom_pair`](https://github.com/sirmarcel/glp/blob/main/glp/calculators/atom_pair.py) for energy, forces, stress (equivalent to [`end_to_end`](https://github.com/sirmarcel/glp/blob/main/glp/calculators/end_to_end.py))
 - [`atom_pair`](https://github.com/sirmarcel/glp/blob/main/glp/calculators/atom_pair.py) with `heat_flux=True` for heat flux for models without message passing. It will produce *wrong* results for models with message passing.
 - [`heat_flux_unfolded`](https://github.com/sirmarcel/glp/blob/main/glp/calculators/heat_flux_unfolded.py) for heat flux for models *with* message passing. This calculator constructs an extended "unfolded" simulation cell (see [this preprint](https://arxiv.org/abs/2303.14434)) and therefore is slower and needs more memory than others.
 - [`supercell`](https://github.com/sirmarcel/glp/blob/main/glp/calculators/supercell.py) for energy, forces, stress in the case where simulation cells are smaller than the cutoff of the potential (for instance, relaxing primitive cells)
