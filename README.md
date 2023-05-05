@@ -225,6 +225,22 @@ cd mlff
 pip install -e .
 ```
 
+### Special Cases / Troubleshooting
+
+You may encounter the following error:
+
+```
+ImportError: cannot import name '_infer_argnums_and_argnames' from 'jax._src.api'
+```
+
+Which is thrown by old versions of `e3nn-jax`, due to [this](https://github.com/e3nn/e3nn-jax/blob/e48dc4c02c67bc9961445d704ede5410e9a198c9/e3nn_jax/_src/util/decorators.py#L10) import of internal `jax` infrastructure.
+
+This is fixed by upgrading to versions of `e3nn-jax` which are `>=0.16.0`, which you can accomplish by adding the following to `pyproject.toml` (under `[tool.poetry.dependencies]`):
+
+```toml
+e3nn-jax = ">=0.16.0"
+```
+
 ## Units and Conventions
 
 `glp` is essentially unit agnostic, it simply manipulates numbers as given. The `dynamics` module assumes everything is in `ase` units, so the timestep is in `ase.units.fs`. For compatibility with `ase`, it is best to stick to Ångstrom for distances and eV for energies.
