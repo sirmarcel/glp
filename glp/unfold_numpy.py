@@ -50,9 +50,9 @@ def _np_unfolding(positions, cell, cutoff):
     (Alternatively, we could do this in scaled coordinates.)
 
     """
-    normals = periodic.get_normals(cell)
-    heights = periodic.get_heights(cell, normals=normals)
-    projections = periodic.project_on(positions, normals)
+
+    heights = periodic.get_heights(cell)
+    projections = periodic.project_on_normals(cell, positions)
 
     # projections = project_onto_planes(positions, cell)
 

@@ -1,4 +1,4 @@
-from jax import jit
+from jax import jit, vmap
 import jax.numpy as jnp
 from functools import partial
 
@@ -50,3 +50,13 @@ def str_to_dtype(string):
         return jnp.float64
     else:
         raise ValueError(f"unknown dtype {string}")
+
+def squared_distance(R):
+    return jnp.sum(R ** cast(2.0), axis=-1)
+
+
+def distance(R):
+    r2 = squared_distance(R)
+    mask = r2 > cast(0)
+    safe_r2 = jnp.where(mask, r2, cast(0))
+    return jnp.where(mask, jnp.sqrt(safe_r2), cast(0))

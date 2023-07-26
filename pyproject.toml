@@ -7,7 +7,6 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.7"
-jax-md = ">=0.2.5"
 comms = { git = "https://github.com/sirmarcel/comms.git", branch = "main" }
 specable = "*"
 numpy = "*"

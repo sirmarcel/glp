@@ -5,7 +5,7 @@ import jax.numpy as jnp
 from glp.system import System, UnfoldedSystem
 from glp.graph import Graph
 from glp.utils import cast
-from glp.periodic import displacement_real
+from glp.periodic import make_displacement
 
 
 def strain_system(system, strain):
@@ -29,29 +29,6 @@ def strain_graph(graph, strain):
 def get_strain(dtype=jnp.float32):
     strain = jnp.zeros((3, 3), dtype=dtype)
     return cast(0.5) * (strain + strain.T)
-
-
-def system_to_graph_without_mic(system, neighbors):
-    positions = stop_gradient(system.R)
-    cell = stop_gradient(system.cell)
-
-    displacement_fn = displacement_real(cell)
-
-    def offset_fn(Ri, Rj):
-        real = Rj - Ri
-        mic = displacement_fn(Rj, Ri)
-        offset = jnp.linalg.solve(cell, mic - real)  # offset applied to Rj
-        return offset
-
-    offsets = jax.vmap(offset_fn)(
-        positions[neighbors.centers], positions[neighbors.others]
-    )
-    cell_offsets = jnp.einsum("aA,pA->pa", system.cell, offsets)
-    edges = system.R[neighbors.others] + cell_offsets - system.R[neighbors.centers]
-
-    mask = neighbors.centers != positions.shape[0]
-
-    return Graph(edges, system.Z, neighbors.centers, neighbors.others, mask)
 
 
 def add_convective(output, energies_potential, velocities, masses):

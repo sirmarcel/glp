@@ -59,7 +59,7 @@ def calculator(
             R = stop_gradient(system.R)
 
             Ri = jnp.tile(R[i], N).reshape(-1, 3)
-            Rji = jax.vmap(displacement_fn)(Ri, R)
+            Rji = jax.vmap(displacement_fn)(R, Ri)
 
             hf = jnp.einsum("ja,jb,jb->a", Rji, grad, velocities)
 

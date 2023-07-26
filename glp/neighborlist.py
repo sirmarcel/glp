@@ -19,14 +19,13 @@ The overall design of this is heavily inspired by jax-md by Samuel Schoenholz.
 from collections import namedtuple
 from jax import jit, vmap
 import jax.numpy as jnp
-from jax_md import partition, space, dataclasses
 from jax.lax import stop_gradient, cond
 from functools import partial
 from typing import Callable
 
 from glp import comms
-from .periodic import displacement_frac, displacement_real, get_heights
-from .utils import boolean_mask_1d, cast
+from .periodic import displacement, get_heights
+from .utils import boolean_mask_1d, cast, squared_distance
 
 Neighbors = namedtuple(
     "Neighbors", ("centers", "others", "overflow", "reference_positions")
@@ -56,11 +55,7 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, debug=
 
     assert capacity_multiplier >= 1.0
 
-    if cell is not None:
-        cell = stop_gradient(cell)
-        displacement = displacement_real(cell)
-    else:
-        displacement = space.free()[0]
+    cell = stop_gradient(cell)
 
     cutoff = cast(stop_gradient(cutoff))
     skin = cast(stop_gradient(skin))
@@ -87,15 +82,13 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, debug=
 
     allowed_movement = (skin * cast(0.5)) ** cast(2.0)
 
-    square_distances = square_distances_fn(displacement)
-
     def need_update_fn(neighbors, new_positions, new_cell):
         # question: how to deal with changes in new_cell?
         # we will invalidate if atoms move too much, but not if
         # the new cell is too small for the cutoff...
 
-        movement = square_distances(
-            neighbors.reference_positions, new_positions, box=new_cell
+        movement = make_squared_distance(new_cell)(
+            neighbors.reference_positions, new_positions
         )
         max_movement = jnp.max(movement)
 
@@ -119,7 +112,10 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, debug=
         N = positions.shape[0]
 
         centers, others, sq_distances, mask, hits = get_neighbors(
-            positions, new_cell, square_distances, squared_cutoff
+            positions,
+            new_cell,
+            make_squared_distance(new_cell),
+            squared_cutoff,
         )
 
         size = int(hits.item() * capacity_multiplier + 1)
@@ -145,7 +141,10 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, debug=
 
         def update(positions, cell):
             centers, others, sq_distances, mask, hits = get_neighbors(
-                positions, cell, square_distances, squared_cutoff
+                positions,
+                cell,
+                make_squared_distance(cell),
+                squared_cutoff,
             )
             centers, _ = boolean_mask_1d(centers, mask, size, N)
             others, overflow = boolean_mask_1d(others, mask, size, N)
@@ -179,7 +178,7 @@ def candidates_fn(n):
 
 def get_neighbors(positions, cell, square_distances, cutoff):
     centers, others = candidates_fn(positions.shape[0])
-    sq_distances = square_distances(positions[centers], positions[others], box=cell)
+    sq_distances = square_distances(positions[centers], positions[others])
 
     mask = sq_distances <= cutoff
     mask = mask * (centers != others)  # remove self-interactions
@@ -188,9 +187,5 @@ def get_neighbors(positions, cell, square_distances, cutoff):
     return centers, others, sq_distances, mask, hits
 
 
-def square_distances_fn(displacement):
-    def _square_distances_fn(Ra, Rb, **kwargs):
-        displacements = vmap(lambda a, b: displacement(a, b, **kwargs))(Ra, Rb)
-        return space.square_distance(displacements)
-
-    return _square_distances_fn
+def make_squared_distance(cell):
+    return vmap(lambda Ra, Rb: squared_distance(displacement(cell, Ra, Rb)))
