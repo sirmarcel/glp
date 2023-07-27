@@ -225,22 +225,6 @@ cd mlff
 pip install -e .
 ```
 
-### Special Cases / Troubleshooting
-
-You may encounter the following error:
-
-```
-ImportError: cannot import name '_infer_argnums_and_argnames' from 'jax._src.api'
-```
-
-Which is thrown by old versions of `e3nn-jax`, due to [this](https://github.com/e3nn/e3nn-jax/blob/e48dc4c02c67bc9961445d704ede5410e9a198c9/e3nn_jax/_src/util/decorators.py#L10) import of internal `jax` infrastructure.
-
-This is fixed by upgrading to versions of `e3nn-jax` which are `>=0.16.0`, which you can accomplish by adding the following to `pyproject.toml` (under `[tool.poetry.dependencies]`):
-
-```toml
-e3nn-jax = ">=0.16.0"
-```
-
 ## Units and Conventions
 
 `glp` is essentially unit agnostic, it simply manipulates numbers as given. The `dynamics` module assumes everything is in `ase` units, so the timestep is in `ase.units.fs`. For compatibility with `ase`, it is best to stick to Ångstrom for distances and eV for energies.
@@ -249,15 +233,15 @@ Stress and heat flux are internally computed *without* dividing by the volume, b
 
 ## What about `jax-md`?
 
-`glp` heavily relies on, and is inspired by, `jax-md`. However, we take a slightly different perspective on how potentials work internally:
+Much of the original design of `glp` was heavily inspired by `jax-md`. Since then, we've decided to take some slightly different technical directions, which allow us to take a more direct approach to treating periodic systems and the associated tasks of computing the stress.
 
-In `jax-md`, potentials are typically defined via their parameters and a `displacement_fn` (computing minimum image convention atom-pair vectors) that encodes the simulation `cell`. This means that the `cell` is a *parameter*, rather than a direct *argument* of the potential energy function, so taking derivatives with respect to the cell or computing the stress is a bit awkward (but possible). It also means that the potential is responsible for mapping the `displacement_fn` over pairs of neighbours, typically with the help of a `neighborlist`.
+In `jax-md`, potentials are typically defined via their parameters and a `displacement_fn` (computing minimum image convention atom-pair vectors) that encodes the simulation `cell`. This means that the `cell` is a *parameter*, rather than a direct *argument* of the potential energy function, so taking derivatives with respect to the cell or computing the stress is a bit awkward (but possible). It also means that the potential is responsible for mapping the `displacement_fn` over pairs of neighbours, typically with the help of a `neighborlist`. At the time of writing, `jax-md` also implements the displacement in general periodic systems such that the derivative with respect to the cell is incorrect, so the stress must be computed by transforming the displacements.
 
-In contrast, `glp` is built on the assumption that for many potentials, a more natural input is simply the graph of atom-pair vectors. In that case, we can take care of all the work of constructing neighbourlists, mapping displacements across them, ahead of time. And since `glp` controls that process, it can also neatly treat the `cell` as an *argument*, and we can compute the stress more directly. Specialising on this type of potential, where we can exactly know the range of interactions, also allows the implementation of the heat flux.
+In contrast, `glp` takes the perspective that potentials are strictly functions mapping `(positions, charges, cell)` to a potential energy. It provides tools to easily implement a particular class of such general potentials: Those that internally represent `(positions, charges, cell)` as a graph of minimum-image convention atom-pair vectors between nodes (atoms) labeled with charges. We take care of constructing this graph and therefore take charge of dealing with displacement functions and neighborlists, which are no longer the responsibility of a given potential.
 
-In the end, we find the `glp` approach slightly more convenient for practical use, as it reduces the amount of heavy lifting a given potential has to do, and the amount of errors that can be introduced this way. The downside is that certain kinds of potentials can't be included in a simple way, for example Tersoff-style potentials with explicit triplet interactions.
+This means that the function signatures involved cleanly represent that underlying concepts, and so we don't need to jump through any hoops to obtain the stress with AD -- with whatever implementation we'd like, even those that directly transform positions and cell.
 
-It should be fairly straightforward to adopt `jax_md.energy` functions for `glp`, if desired, and we are looking forward to PRs in that direction!
+In any case, it should be fairly straightforward to adopt `jax_md.energy` functions for `glp`, if desired, and we are looking forward to PRs in that direction!
 
 ## Want to know more?
 

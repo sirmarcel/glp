@@ -30,6 +30,6 @@ sh run.py
 
 ### Todos
 
-- [ ] Custom JVP to make derivatives of m.i.c. displacements correct
+- [x] Make cell derivatives of m.i.c. displacements correct; done! see https://github.com/sirmarcel/glp/pull/1
 - [ ] Make jit-table update of unfolding, following the pattern of the nighborlist
 - [ ] Upgrade neighborlist to cell list (enable scaling to larger systems)
