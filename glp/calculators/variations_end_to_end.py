@@ -5,7 +5,7 @@ from glp.graph import system_to_graph
 from glp.neighborlist import neighbor_list
 
 from .calculator import Calculator
-from .utils import strain_system, strain_graph, get_strain, system_to_graph_without_mic
+from .utils import strain_system, strain_graph, get_strain
 
 
 def calculator(
@@ -31,7 +31,7 @@ def calculator(
         def energy_fn(system, strain, state):
             state = update_neighbors(system, state)
             system = strain_system(system, strain)
-            graph = system_to_graph_without_mic(system, state)
+            graph = system_to_graph(system, state)
             return jnp.sum(potential(graph)), state
 
         energies_and_derivatives_fn = jax.value_and_grad(
@@ -54,7 +54,7 @@ def calculator(
 
         def energy_fn(system, state):
             state = update_neighbors(system, state)
-            graph = system_to_graph_without_mic(system, state)
+            graph = system_to_graph(system, state)
             return jnp.sum(potential(graph)), state
 
         energies_and_derivatives_fn = jax.value_and_grad(

@@ -7,7 +7,6 @@ from glp.neighborlist import neighbor_list
 from glp.utils import cast
 
 from .calculator import Calculator
-from .utils import system_to_graph_without_mic
 
 
 def calculator(
@@ -42,10 +41,7 @@ def calculator(
     def calculator_fn(system, state, velocities=None, masses=None):
         state = update_neighbors(system, state)
 
-        if fractional_mic:
-            graph = system_to_graph(system, state)
-        else:
-            graph = system_to_graph_without_mic(system, state)
+        graph = system_to_graph(system, state)
 
         energy, grads = energies_and_derivatives_fn(graph)
         energy_and_energies, grads = energies_and_derivatives_fn(graph)

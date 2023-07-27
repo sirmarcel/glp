@@ -1,11 +1,10 @@
 import jax
 import jax.numpy as jnp
-from jax_md.space import distance
 
 from glp.neighborlist import quadratic_neighbor_list
 from glp.system import atoms_to_system
 from glp.graph import system_to_graph
-from glp.utils import cast
+from glp.utils import cast, distance
 from .potential import Potential
 
 
@@ -57,32 +56,8 @@ def lennard_jones(sigma=2.0, epsilon=1.5, cutoff=10.0, onset=6.0):
         # a = cast(0.5) * jax.ops.segment_sum(out, graph.centers, graph.nodes.shape[0], indices_are_sorted=True)
         # b = cast(0.5) * jax.ops.segment_sum(out, graph.others, graph.nodes.shape[0], indices_are_sorted=False)
 
-        return jax.ops.segment_sum(out, graph.centers, graph.nodes.shape[0], indices_are_sorted=True)
+        return jax.ops.segment_sum(
+            out, graph.centers, graph.nodes.shape[0], indices_are_sorted=True
+        )
 
     return Potential(lennard_jones_fn, cutoff)
-
-
-def lennard_jones_jax_md(sigma=2.0, epsilon=1.5, cutoff=10.0, onset=6.0):
-    from jax_md import energy, util
-
-    sigma = util.f32(sigma)
-    epsilon = util.f32(epsilon)
-    cutoff = util.f32(cutoff)
-    onset = util.f32(onset)
-
-    def _pair_lennard_jones_argon(dr):
-        return util.f32(0.5) * energy.lennard_jones(dr, sigma=sigma, epsilon=epsilon)
-
-    pair_lennard_jones_argon = energy.multiplicative_isotropic_cutoff(
-        _pair_lennard_jones_argon, r_onset=onset, r_cutoff=cutoff
-    )
-
-    def _lennard_jones(graph):
-        distances = distance(graph.edges)
-        contributions = jax.vmap(pair_lennard_jones_argon)(distances)
-        out = contributions * graph.mask
-        out = jax.ops.segment_sum(out, graph.centers, graph.nodes.shape[0])
-
-        return out
-
-    return _lennard_jones

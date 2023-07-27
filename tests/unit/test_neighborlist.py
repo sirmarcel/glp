@@ -36,7 +36,7 @@ def filter_and_sort(distances, cutoff):
 
 
 def get_distances(graph):
-    from jax_md.space import distance
+    from glp.utils import distance
 
     return distance(graph.edges)[graph.mask]
 

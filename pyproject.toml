@@ -1,13 +1,12 @@
 [tool.poetry]
 name = "glp"
-version = "0.1.0"
+version = "0.2.0"
 description = "forces, stress and heat flux for graph machine learning potentials"
 authors = ["Marcel Langer <dev@marcel.science>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.7"
-jax-md = ">=0.2.5"
 comms = { git = "https://github.com/sirmarcel/comms.git", branch = "main" }
 specable = "*"
 numpy = "*"

@@ -36,7 +36,13 @@ from .unfold_numpy import _np_unfolding
 
 Unfolding = namedtuple(
     "Unfolding",
-    ("wrap_offsets", "replica_idx", "replica_offsets", "reference_positions", "reference_cell"),
+    (
+        "wrap_offsets",
+        "replica_idx",
+        "replica_offsets",
+        "reference_positions",
+        "reference_cell",
+    ),
 )
 Unfolder = namedtuple("Unfolder", ("unfolding", "needs_update"))
 
@@ -61,7 +67,7 @@ def unfolder(system, cutoff, skin):
         # of the cutoff -- we don't care about movement in the interior
         # (this is probably way too much optimisation)
         movements = system.R - unfolding.reference_positions
-        movements = jnp.abs(periodic.project_on_normals(movements, system.cell))
+        movements = jnp.abs(periodic.project_on_normals(system.cell, movements))
 
         # we just give up if the cell changes -- this should only happen during testing,
         # as the unfolded stuff should only be relevant for NVE
@@ -129,7 +135,7 @@ def get_wrapping(positions, cell):
     # compute the offsets needed to retvrn positions into cell,
     # easily computed by taking the div wrt 1.0 in fractional coords
 
-    frac = periodic.to_frac(positions, cell)
+    frac = periodic.to_frac(cell, positions)
     offsets = cast(-1.0) * (frac // cast(1.0)).astype(jnp.int32)
 
     return offsets

@@ -4,8 +4,8 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from .system import to_displacement
 from .utils import cast
+from .periodic import displacement
 
 Graph = namedtuple("Graph", ("edges", "nodes", "centers", "others", "mask"))
 
@@ -17,10 +17,8 @@ def system_to_graph(system, neighbors):
     positions = system.R
     nodes = system.Z
 
-    displacement_fn = to_displacement(system)
-
-    edges = jax.vmap(displacement_fn)(
-        positions[neighbors.others], positions[neighbors.centers]
+    edges = jax.vmap(partial(displacement, system.cell))(
+        positions[neighbors.centers], positions[neighbors.others]
     )
 
     mask = neighbors.centers != positions.shape[0]
