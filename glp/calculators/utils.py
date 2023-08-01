@@ -17,7 +17,13 @@ def strain_system(system, strain):
 def strain_unfolded_system(system, strain):
     strained_R = system.R + jnp.einsum("ab,ib->ia", strain, system.R)
     return UnfoldedSystem(
-        strained_R, system.Z, system.cell, system.mask, system.replica_idx
+        strained_R,
+        system.Z,
+        system.cell,
+        system.mask,
+        system.replica_idx,
+        system.padding_mask,
+        system.updated,
     )
 
 

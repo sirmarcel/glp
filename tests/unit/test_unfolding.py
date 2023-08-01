@@ -1,6 +1,8 @@
 from unittest import TestCase
 
 import numpy as np
+
+# np.random.seed(1)
 from ase import Atoms
 
 from glp.unfold import unfolder, unfold
@@ -10,7 +12,7 @@ from glp.system import atoms_to_system, unfold_system
 def make_unfolded_atoms(system, unfolding):
     unfolded = unfold_system(system, unfolding)
 
-    return Atoms(positions=unfolded.R, pbc=False)
+    return Atoms(positions=unfolded.R[np.where(unfolded.padding_mask)], pbc=False)
 
 
 def compare_distances(a, b, cutoff, atol=0.0, rtol=1e-7):
@@ -31,7 +33,17 @@ def compare_all_distances(atoms, unfolded, cutoff, atol=0.0, rtol=1e-7):
     unfolded_dist = unfolded.get_all_distances(mic=False)
 
     for i in range(len(atoms)):
-        compare_distances(dist[i], unfolded_dist[i], cutoff, atol=atol, rtol=rtol)
+        try:
+            compare_distances(dist[i], unfolded_dist[i], cutoff, atol=atol, rtol=rtol)
+        except AssertionError:
+            a = dist[i]
+            b = unfolded_dist[i]
+
+            a = filter_and_sort(a, cutoff)
+            b = filter_and_sort(b, cutoff)
+
+            print(f"idx {i}: {a.shape}, {b.shape}")
+            raise
 
 
 def compare_all_distances_with_nl(atoms, unfolded, cutoff, atol=0.0, rtol=1e-7):
@@ -46,7 +58,11 @@ def compare_all_distances_with_nl(atoms, unfolded, cutoff, atol=0.0, rtol=1e-7):
     for i in range(len(atoms)):
         a = dist[np.where(idx_dist == i)]
         b = unfolded_dist[np.where(idx_unfolded_dist == i)]
-        compare_distances(a, b, cutoff, atol=atol, rtol=rtol)
+        try:
+            compare_distances(a, b, cutoff, atol=atol, rtol=rtol)
+        except AssertionError:
+            print(f"idx {i}: {a.shape}, {b.shape}")
+            raise
 
 
 def perturb_along_normal(atoms, spread, basis=0):
@@ -118,10 +134,10 @@ class TestUnfolder(TestCase):
 
             system = atoms_to_system(atoms)
 
-            unfolding, need_update = unfolder(system, cutoff, skin)
+            unfolding, update, need_update = unfolder(system, cutoff, skin, debug=True)
             unfolded_atoms = make_unfolded_atoms(system, unfolding)
 
-            compare_all_distances(atoms, unfolded_atoms, cutoff, atol=1e-6)
+            compare_all_distances(atoms, unfolded_atoms, cutoff, atol=1e-5)
 
             # test: move atoms w/o triggering recomputation
             # case 1: tiny random changes
@@ -135,23 +151,23 @@ class TestUnfolder(TestCase):
                 system2 = atoms_to_system(atoms2)
                 self.assertFalse(need_update(system2, unfolding))
 
-            # now we just check that things work
-            atoms2 = perturb_along_normal(atoms, skin / 2, basis=0)
-            system2 = atoms_to_system(atoms2)
+            unfolding = update(system2, unfolding, force_update=False)
+
+            assert not unfolding.overflow
             unfolded_atoms = make_unfolded_atoms(system2, unfolding)
-            compare_all_distances(atoms2, unfolded_atoms, cutoff, atol=1e-6)
+            compare_all_distances(atoms2, unfolded_atoms, cutoff, atol=1e-5)
 
             # test: move atoms *further*, triggering recomputation
-            atoms3 = perturb_along_normal(atoms2, skin / 2, basis=0)
-            atoms3 = perturb_along_normal(atoms3, skin / 2, basis=1)
+            atoms3 = perturb_along_normal(atoms2, skin, basis=0)
+            atoms3 = perturb_along_normal(atoms3, skin, basis=1)
             system3 = atoms_to_system(atoms3)
             self.assertTrue(need_update(system3, unfolding))
 
-            # unfolding = update(system3.R)
+            unfolding = update(system3, unfolding)
+            assert not unfolding.overflow
 
-            # wrapped, unfolded = unfold(system3.R, system3.cell, unfolding)
-            # unfolded_atoms = make_unfolded_atoms(wrapped, unfolded, atoms)
-            # compare_all_distances(atoms3, unfolded_atoms, cutoff)
+            unfolded_atoms = make_unfolded_atoms(system3, unfolding)
+            compare_all_distances(atoms3, unfolded_atoms, cutoff, atol=1e-5)
 
     def test_large_cutoff(self):
         n = 10

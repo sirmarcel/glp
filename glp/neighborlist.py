@@ -39,11 +39,26 @@ def neighbor_list(system, cutoff, skin, capacity_multiplier=1.25):
         system.cell, cutoff, skin, capacity_multiplier=capacity_multiplier
     )
 
-    def _update(system, neighbors):
-        neighbors = update(system.R, neighbors, new_cell=system.cell)
-        return neighbors
+    if hasattr(system, "padding_mask"):
 
-    neighbors = allocate(system.R)
+        def _update(system, neighbors):
+            neighbors = update(
+                system.R,
+                neighbors,
+                new_cell=system.cell,
+                padding_mask=system.padding_mask,
+                force_update=system.updated,
+            )
+            return neighbors
+
+        neighbors = allocate(system.R, padding_mask=system.padding_mask)
+    else:
+
+        def _update(system, neighbors):
+            neighbors = update(system.R, neighbors, new_cell=system.cell)
+            return neighbors
+
+        neighbors = allocate(system.R)
 
     return neighbors, _update
 
@@ -100,7 +115,7 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, debug=
         # if the cell is now *too small*, we need to update for sure to set overflow flag
         return should_update | cell_too_small(new_cell)
 
-    def allocate_fn(positions, new_cell=None):
+    def allocate_fn(positions, new_cell=None, padding_mask=None):
         # this is not jittable,
         # we're determining shapes
 
@@ -116,6 +131,7 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, debug=
             new_cell,
             make_squared_distance(new_cell),
             squared_cutoff,
+            padding_mask=padding_mask,
         )
 
         size = int(hits.item() * capacity_multiplier + 1)
@@ -127,7 +143,7 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, debug=
         # print("done with neighbors=None branch")
         return Neighbors(centers, others, overflow, positions)
 
-    def update_fn(positions, neighbors, new_cell=None):
+    def update_fn(positions, neighbors, new_cell=None, padding_mask=None, force_update=False):
         # this is jittable,
         # neighbors tells us all the shapes we need
 
@@ -139,12 +155,13 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, debug=
         N = positions.shape[0]
         size = neighbors.centers.shape[0]
 
-        def update(positions, cell):
+        def update(positions, cell, padding_mask):
             centers, others, sq_distances, mask, hits = get_neighbors(
                 positions,
                 cell,
                 make_squared_distance(cell),
                 squared_cutoff,
+                padding_mask=padding_mask,
             )
             centers, _ = boolean_mask_1d(centers, mask, size, N)
             others, overflow = boolean_mask_1d(others, mask, size, N)
@@ -155,11 +172,12 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, debug=
 
         # if we need an update, call update(), else do a no-op and return input
         return cond(
-            need_update_fn(neighbors, positions, new_cell),
+            force_update | need_update_fn(neighbors, positions, new_cell),
             update,
-            lambda a, b: neighbors,
+            lambda a, b, c: neighbors,
             positions,
             new_cell,
+            padding_mask,
         )
 
     if debug:
@@ -176,12 +194,17 @@ def candidates_fn(n):
     return centers, others
 
 
-def get_neighbors(positions, cell, square_distances, cutoff):
+def get_neighbors(positions, cell, square_distances, cutoff, padding_mask=None):
     centers, others = candidates_fn(positions.shape[0])
     sq_distances = square_distances(positions[centers], positions[others])
 
     mask = sq_distances <= cutoff
     mask = mask * (centers != others)  # remove self-interactions
+
+    # facility to drop some positions from neighborlist
+    if padding_mask is not None:
+        mask = mask * padding_mask[centers]
+
     hits = jnp.sum(mask)
 
     return centers, others, sq_distances, mask, hits

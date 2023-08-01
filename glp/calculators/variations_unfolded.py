@@ -27,7 +27,7 @@ def calculator(
     cutoff = potential.cutoff
     cutoff_unfolder = potential.effective_cutoff
 
-    unfolding, check_unfolding = unfolder(system, cutoff_unfolder, skin_unfolder)
+    unfolding, update_unfolding = unfolder(system, cutoff_unfolder, skin_unfolder)
     big = unfold_system(system, unfolding)
     neighbors, update_neighbors = neighbor_list(
         big, cutoff=cutoff, skin=skin, capacity_multiplier=capacity_multiplier
@@ -38,13 +38,13 @@ def calculator(
     if stress_mode == "direct_system":
 
         def energy_fn(system, state):
-            overflow_unfolding = check_unfolding(system, state.unfolding)
+            unfolding = update_unfolding(system, state.unfolding)
 
             big = unfold_system(system, state.unfolding)
             neighbors = update_neighbors(big, state.neighbors)
 
             state = State(
-                neighbors, state.unfolding, overflow_unfolding | neighbors.overflow
+                neighbors, unfolding, unfolding.overflow | neighbors.overflow
             )
 
             graph = system_to_graph(big, state.neighbors)
@@ -90,13 +90,13 @@ def calculator(
             )
 
         elif stress_mode == "direct_unfolded":
-            overflow_unfolding = check_unfolding(system, state.unfolding)
+            unfolding = update_unfolding(system, state.unfolding)
 
             big = unfold_system(system, state.unfolding)
             neighbors = update_neighbors(big, state.neighbors)
 
             state = State(
-                neighbors, state.unfolding, overflow_unfolding | neighbors.overflow
+                neighbors, unfolding, unfolding.overflow | neighbors.overflow
             )
 
             energy, grads = energies_and_derivatives_fn(big, state)
@@ -107,13 +107,13 @@ def calculator(
             stress = jnp.einsum("ia,ib->ab", big.R, grads.R)
 
         elif stress_mode == "strain_unfolded":
-            overflow_unfolding = check_unfolding(system, state.unfolding)
+            unfolding = update_unfolding(system, state.unfolding)
 
             big = unfold_system(system, unfolding)
             neighbors = update_neighbors(big, state.neighbors)
 
             state = State(
-                neighbors, state.unfolding, overflow_unfolding | neighbors.overflow
+                neighbors, unfolding, unfolding.overflow | neighbors.overflow
             )
 
             strain = get_strain(dtype=system.R.dtype)
