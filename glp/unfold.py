@@ -60,6 +60,9 @@ def unfold(positions, cell, unfolding):
         wrapped[unfolding.replica_idx], cell, unfolding.replica_offsets
     )
 
+    # avoid spurious gradients to positions[-1]
+    unfolded = unfolded * unfolding.padding_mask[:, None]
+
     return wrapped, unfolded
 
 

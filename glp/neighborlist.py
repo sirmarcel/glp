@@ -201,9 +201,10 @@ def get_neighbors(positions, cell, square_distances, cutoff, padding_mask=None):
     mask = sq_distances <= cutoff
     mask = mask * (centers != others)  # remove self-interactions
 
-    # facility to drop some positions from neighborlist
+    # mask out fake positions
     if padding_mask is not None:
         mask = mask * padding_mask[centers]
+        mask = mask * padding_mask[others]
 
     hits = jnp.sum(mask)
 
