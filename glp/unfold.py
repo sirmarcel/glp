@@ -33,6 +33,7 @@ from jax.lax import stop_gradient, cond
 from collections import namedtuple
 from functools import partial
 
+from glp import comms
 from glp.periodic import project_on_normals, get_heights, to_frac
 from glp.utils import cast
 
@@ -86,6 +87,24 @@ def unfolder(system, cutoff, skin, capacity_multiplier=1.1, debug=False):
     cutoff = cast(stop_gradient(cutoff))
     skin = cast(stop_gradient(skin))
 
+    if system.cell is not None:
+
+        def cell_too_small(cell):
+            min_height = jnp.min(get_heights(cell))
+            return (cutoff + skin) > min_height
+
+    else:
+
+        def cell_too_small(cell):
+            return False
+
+    if cell_too_small(system.cell):
+        min_height = jnp.min(get_heights(system.cell))
+        comms.warn(
+            f"warning: unfolding is only possible up to {min_height:.1f}Å but total cutoff is {cutoff:.1f}+{skin:.1f}={skin+cutoff:.1f} Å"
+        )
+        comms.warn("this will yield incorrect results!")
+
     def allocate_fn(system):
         system = stop_gradient(system)
 
@@ -120,7 +139,11 @@ def unfolder(system, cutoff, skin, capacity_multiplier=1.1, debug=False):
         # as the unfolded stuff should only be relevant for NVE
         cell_changes = jnp.abs(system.cell - unfolding.reference_cell).sum()
 
-        return jnp.any(movements >= cast(0.5) * skin) | (cell_changes > 0)
+        return (
+            jnp.any(movements >= cast(0.5) * skin)
+            | (cell_changes > 0)
+            | cell_too_small(system.cell)
+        )
 
     def update_fn(system, unfolding, force_update=False):
         def actual_update_fn(system, unfolding):
@@ -133,6 +156,9 @@ def unfolder(system, cutoff, skin, capacity_multiplier=1.1, debug=False):
             replica_idx, replica_offsets, padding_mask, overflow = get_unfolding(
                 replicas, unfolding.replica_idx.shape[0]
             )
+
+            overflow = overflow | cell_too_small(system.cell)
+
             return Unfolding(
                 replica_idx,
                 replica_offsets,

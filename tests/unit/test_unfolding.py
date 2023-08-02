@@ -181,8 +181,29 @@ class TestUnfolder(TestCase):
         atoms = Atoms(scaled_positions=positions, cell=cell, pbc=True)
         system = atoms_to_system(atoms)
 
-        unfolding, need_update = unfolder(system, cutoff, skin)
+        unfolding, _ = unfolder(system, cutoff, skin)
 
         unfolded_atoms = make_unfolded_atoms(system, unfolding)
 
         compare_all_distances_with_nl(atoms, unfolded_atoms, cutoff, atol=1e-6)
+
+    def test_abort_if_cell_too_smal(self):
+        n = 10
+        skin = 0.1
+        spread = 0.1
+        cutoff = 0.89
+        cell = np.eye(3)
+
+        positions = np.random.random((n, 3)) * (1 + 2 * spread) - spread
+
+        atoms = Atoms(scaled_positions=positions, cell=cell, pbc=True)
+        system = atoms_to_system(atoms)
+
+        unfolding, update = unfolder(system, cutoff, skin)
+
+        atoms.set_cell(0.6 * np.eye(3))
+        system = atoms_to_system(atoms)
+
+        unfolding = update(system, unfolding)
+
+        assert unfolding.overflow
