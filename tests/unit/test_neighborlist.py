@@ -9,8 +9,9 @@ from ase.build import bulk
 
 
 from glp.neighborlist import quadratic_neighbor_list, neighbor_list
-from glp.system import atoms_to_system
+from glp.system import atoms_to_system, unfold_system
 from glp.graph import system_to_graph
+from glp.unfold import unfolder
 
 
 def random_movements(n, amount):
@@ -202,3 +203,41 @@ class TestNeighborList(TestCase):
         compare_distances(
             atoms.get_all_distances(mic=True), distances, cutoff, atol=1e-5
         )
+
+    def test_unfolding(self):
+        from glp.utils import distance
+
+        cutoff = 5.0
+        skin = 0.5
+        atoms = bulk("Ar", cubic=True) * [5, 5, 5]
+
+        system = atoms_to_system(atoms)
+
+        unfolding, update_unfolding = unfolder(system, cutoff, skin)
+
+        big = unfold_system(system, unfolding)
+
+        neighbors, update = neighbor_list(big, cutoff=cutoff, skin=skin)
+
+        distances = distance(system_to_graph(big, neighbors).edges)
+        ase_distances = atoms.get_all_distances(mic=True)
+
+        for i in range(len(atoms)):
+            compare_distances(
+                ase_distances[i], distances[neighbors.centers == i], cutoff, atol=1e-5
+            )
+
+        atoms.positions += random_movements(len(atoms), 0.6 * skin)
+        system = atoms_to_system(atoms)
+
+        unfolding = update_unfolding(system, unfolding)
+        big = unfold_system(system, unfolding)
+        neighbors = update(big, neighbors)
+
+        distances = distance(system_to_graph(big, neighbors).edges)
+        ase_distances = atoms.get_all_distances(mic=True)
+
+        for i in range(len(atoms)):
+            compare_distances(
+                ase_distances[i], distances[neighbors.centers == i], cutoff, atol=1e-5
+            )

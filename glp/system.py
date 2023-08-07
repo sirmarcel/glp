@@ -5,7 +5,9 @@ from jax import numpy as jnp
 from .periodic import make_displacement
 
 System = namedtuple("System", ("R", "Z", "cell"))
-UnfoldedSystem = namedtuple("System", ("R", "Z", "cell", "mask", "replica_idx"))
+UnfoldedSystem = namedtuple(
+    "System", ("R", "Z", "cell", "mask", "replica_idx", "padding_mask", "updated")
+)
 
 
 def atoms_to_system(atoms, dtype=jnp.float32):
@@ -28,8 +30,9 @@ def unfold_system(system, unfolding):
     all_Z = system.Z[all_idx]
 
     mask = jnp.arange(all_R.shape[0]) < N
+    padding_mask = jnp.concatenate((jnp.ones(N, dtype=bool), unfolding.padding_mask))
 
-    return UnfoldedSystem(all_R, all_Z, None, mask, all_idx)
+    return UnfoldedSystem(all_R, all_Z, None, mask, all_idx, padding_mask, unfolding.updated)
 
 
 def to_displacement(system):

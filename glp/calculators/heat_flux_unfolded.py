@@ -27,7 +27,7 @@ def calculator(
     cutoff = potential.cutoff
     cutoff_unfolder = potential.effective_cutoff
 
-    unfolding, check_unfolding = unfolder(system, cutoff_unfolder, skin_unfolder)
+    unfolding, update_unfolding = unfolder(system, cutoff_unfolder, skin_unfolder)
     big = unfold_system(system, unfolding)
     neighbors, update_neighbors = neighbor_list(
         big, cutoff=cutoff, skin=skin, capacity_multiplier=capacity_multiplier
@@ -55,13 +55,13 @@ def calculator(
         return jnp.sum(barycenter, axis=0)
 
     def calculator_fn(system, state, velocities, masses=None):
-        overflow_unfolding = check_unfolding(system, state.unfolding)
+        unfolding = update_unfolding(system, state.unfolding)
 
         big = unfold_system(system, unfolding)
         neighbors = update_neighbors(big, state.neighbors)
 
         state = State(
-            neighbors, state.unfolding, overflow_unfolding | neighbors.overflow
+            neighbors, state.unfolding, unfolding.overflow | neighbors.overflow
         )
 
         energy_and_energies, grads = energy_and_derivatives_fn(big, state)
@@ -75,7 +75,7 @@ def calculator(
 
         _, term_1 = jax.jvp(
             lambda R: barycenter_fn(
-                UnfoldedSystem(R, big.Z, big.cell, big.mask, big.replica_idx),
+                UnfoldedSystem(R, big.Z, big.cell, big.mask, big.replica_idx, big.padding_mask, big.updated),
                 state,
                 r_aux,
             ),
