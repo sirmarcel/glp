@@ -31,5 +31,5 @@ sh run.py
 ### Todos
 
 - [x] Make cell derivatives of m.i.c. displacements correct; done! see https://github.com/sirmarcel/glp/pull/1
-- [ ] Make jit-table update of unfolding, following the pattern of the nighborlist
+- [x] Make jit-table update of unfolding, following the pattern of the neighborlist; done! see https://github.com/sirmarcel/glp/pull/2
 - [ ] Upgrade neighborlist to cell list (enable scaling to larger systems)

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "glp"
-version = "0.2.0"
+version = "0.3.0"
 description = "forces, stress and heat flux for graph machine learning potentials"
 authors = ["Marcel Langer <dev@marcel.science>"]
 license = "MIT"

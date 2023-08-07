@@ -96,7 +96,7 @@ def unfolder(system, cutoff, skin, capacity_multiplier=1.1, debug=False):
     else:
 
         def cell_too_small(cell):
-            return False
+            return jnp.array(False)
 
     if cell_too_small(system.cell):
         min_height = jnp.min(get_heights(system.cell))
