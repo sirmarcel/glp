@@ -88,8 +88,6 @@ class TestNeighborList(TestCase):
         skin = 0.0
         scaled_positions = np.random.random((600, 3))
 
-        #
-
         def get_sizes(idx, n):
             idx = jnp.array(idx, dtype=int)
             return jax.ops.segment_sum(jnp.ones_like(idx), idx, n)
@@ -183,7 +181,9 @@ class TestNeighborList(TestCase):
 
         start = monotonic()
         neighbors = update(system, neighbors)
-        assert monotonic() - start > 0.5
+        assert (
+            monotonic() - start > 0.25
+        )  # this is stupid -- if your computer is fast this fails
 
         distances = get_distances(system_to_graph(system, neighbors))
 

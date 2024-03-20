@@ -2,7 +2,7 @@
 
 The role of a neighborlist implementation is to reduce the amount of pairs
 of atoms to consider from N*N to something linear in N by removing pairs
-that are farther away than a given cutoff radius.
+that are further away than a given cutoff radius.
 
 This file implements this in a naive way: We first generate all N*N combinations,
 and then trim down these candidates into a fixed number of pairs. Once that number
@@ -33,7 +33,9 @@ Neighbors = namedtuple(
 
 
 def neighbor_list(system, cutoff, skin, capacity_multiplier=1.25):
-    # convenience interface
+    # convenience interface: we often don't need explicit access to an allocate_fn, since
+    #     the neighborlist setup takes that role (see for instance all the calculators)
+    #     so this just does the allocation and gives us a jittable update function back
 
     allocate, update = quadratic_neighbor_list(
         system.cell, cutoff, skin, capacity_multiplier=capacity_multiplier
@@ -64,10 +66,6 @@ def neighbor_list(system, cutoff, skin, capacity_multiplier=1.25):
 
 
 def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, debug=False):
-    """Toy implementation of neighborlist in pbc"""
-    # todo: more sophisticated checks for varying cell
-    # todo: use cell list
-
     assert capacity_multiplier >= 1.0
 
     cell = stop_gradient(cell)
@@ -98,10 +96,6 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, debug=
     allowed_movement = (skin * cast(0.5)) ** cast(2.0)
 
     def need_update_fn(neighbors, new_positions, new_cell):
-        # question: how to deal with changes in new_cell?
-        # we will invalidate if atoms move too much, but not if
-        # the new cell is too small for the cutoff...
-
         movement = make_squared_distance(new_cell)(
             neighbors.reference_positions, new_positions
         )
@@ -143,7 +137,9 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, debug=
         # print("done with neighbors=None branch")
         return Neighbors(centers, others, overflow, positions)
 
-    def update_fn(positions, neighbors, new_cell=None, padding_mask=None, force_update=False):
+    def update_fn(
+        positions, neighbors, new_cell=None, padding_mask=None, force_update=False
+    ):
         # this is jittable,
         # neighbors tells us all the shapes we need
 

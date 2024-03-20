@@ -2,9 +2,10 @@ from unittest import TestCase
 
 import numpy as np
 
-from jax.config import config
+import jax
 
-config.update("jax_enable_x64", True)
+jax.config.update("jax_enable_x64", True)
+
 import jax.numpy as jnp
 
 from jax.lax import scan
@@ -25,6 +26,7 @@ from glp.calculators import atom_pair
 
 from glp.dynamics import verlet as verlet_dynamics
 from glp.dynamics import atoms_to_input
+
 
 class TestLJ(TestCase):
     def setUp(self):
@@ -71,7 +73,7 @@ class TestLJ(TestCase):
         verlet2.run(steps=nsteps)
 
         system, velocities, masses = atoms_to_input(atoms3, dtype=jnp.float64)
-        
+
         dynamics, state = verlet_dynamics(
             system, velocities, masses, get_calculator, dt
         )

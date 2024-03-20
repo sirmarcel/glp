@@ -2,9 +2,9 @@ from unittest import TestCase
 
 import numpy as np
 
-from jax.config import config
+import jax
 
-config.update("jax_enable_x64", True)
+jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 
 

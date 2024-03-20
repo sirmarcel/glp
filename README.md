@@ -5,18 +5,18 @@
 
 In a nutshell: If you provide a function that maps a `Graph` of atom-pair vectors to atomic potential `energies`, `glp` takes care of everything else. ✨
 
-With `glp`, we aim to make it straightforward to go from implementing a new machine-learning potential to using it for moderate-sized production runs (thousands of atoms, nanoseconds of MD). `glp` also serves as an illustration of implementations of stress with automatic differentiation. It was written to support the following [manuscript](https://arxiv.org/abs/2305.01401):
+With `glp`, we aim to make it straightforward to go from implementing a new machine-learning potential to using it for moderate-sized production runs (thousands of atoms, nanoseconds of MD). `glp` also serves as an illustration of implementations of stress with automatic differentiation. It was written to support the following [paper](https://doi.org/10.1063/5.0155760):
 
 ```
 Stress and heat flux via automatic differentiation
 by Marcel F. Langer, J. Thorben Frank, and Florian Knoop
-
-arXiv:2305.01401
+J. Chem. Phys. 159, 174105 (2023)
+Preprint: arxiv:2305.01401 (2023)
 ```
 
-If you use this code in an academic context, please cite this preprint. If you use the heat flux, please also cite [this other preprint](https://arxiv.org/abs/2303.14434). 🙏
+If you use this code in an academic context, please cite this preprint. If you use the heat flux, please also cite [this other paper](https://doi.org/10.1103/physrevb.108.l100302). 🙏
 
-**`glp` is a fairly early-stage code. There is not stable release cycle yet!**
+**`glp` is considered essentially "finished" -- expect mostly occasional maintanance updates. Feel free to file issues if things break.**
 
 See also: [`gkx`](https://github.com/sirmarcel/gkx), which implements the remaining parts for a fully `jax`-based Green-Kubo workflow.
 
@@ -249,7 +249,7 @@ Please also see the technical documentation of `glp` in the `glp` folder. Otherw
 
 ## What's next?
 
-For `glp`, the next steps are outlined in the technical readme: there is some work to be done to scale to larger systems and have less catastrophic reactions to an overflow of the unfolding procedure which is needed for the heat flux.
+For `glp`, the next steps are outlined in the technical readme: there is some work to be done to scale to larger systems.
 
 In a larger context, `glp` aims to be a neat building block for larger systems. In particular, we're planning to use it as one part of a future molecular dynamics package, the seeds of which you can find in `glp/dynamics` and `mlff/mdx`. However, we're still gathering some experience on how these tools work in practice, and are thinking about the correct abstractions to build this thing.
 
