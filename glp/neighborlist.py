@@ -34,7 +34,7 @@ from jax.lax import stop_gradient, cond, iota
 import numpy as np
 
 from glp import comms
-from .periodic import displacement, get_heights
+from .periodic import displacement, get_heights, wrap, inverse
 from .utils import boolean_mask_1d, cast, squared_distance
 
 Neighbors = namedtuple(
@@ -42,7 +42,7 @@ Neighbors = namedtuple(
 )
 
 CellList = namedtuple(
-    "CellList", ("id", "overflow", "capacity", "size", "cells_per_side")
+    "CellList", ("id", "reallocate", "capacity", "size", "cells_per_side")
 )
 
 def neighbor_list(system, cutoff, skin, capacity_multiplier=1.25):
@@ -110,7 +110,7 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, use_ce
     allowed_movement = (skin * cast(0.5)) ** cast(2.0)
 
     if cell is not None and use_cell_list:
-        if jnp.all(jnp.any(cutoff < cell / 3., axis=1)):
+        if jnp.all(jnp.any(cutoff < get_heights(cell) / 3., axis=0)):
             cl_allocate, cl_update = cell_list(cell, cutoff)
         else:
             cl_allocate = cl_update = None
@@ -176,8 +176,6 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, use_ce
         dim = positions.shape[1]
         size = neighbors.centers.shape[0]
         def update(positions, cell, padding_mask, cl=neighbors.cell_list):
-            # if cl:
-            #     cell_position, cell_id, overflow, cell_capacity, cell_size, cells_per_side = cl
             cl = cl_update(positions, cl, cell) if cl_update is not None else None
             centers, others, sq_distances, mask, hits = get_neighbors(
                 positions,
@@ -216,7 +214,7 @@ def candidates_fn(n):
     others = jnp.reshape(square, (-1,))
     return centers, others
 
-def cell_list_candidate_fn(cell_id, N, dim, _):
+def cell_list_candidate_fn(cell_id, N, dim):
     idx = cell_id
 
     cell_idx = [idx] * (dim**3)
@@ -234,14 +232,16 @@ def cell_list_candidate_fn(cell_id, N, dim, _):
     neighbor_idx = copy_values_from_cell(neighbor_idx, cell_idx, idx)
     others = jnp.reshape(neighbor_idx[:-1, :, 0], (-1,))
     centers = jnp.repeat(jnp.arange(0, N), others.shape[0] // N)
+    print(others.shape, centers.shape)
     return centers, others
 
 def get_neighbors(positions, square_distances, cutoff, padding_mask=None, cl=None):
     N, dim = positions.shape
     if cl is not None:
-        centers, others = cell_list_candidate_fn(cl.id, N, dim, cl.cells_per_side)
+        centers, others = cell_list_candidate_fn(cl.id, N, dim)
     else:
         centers, others = candidates_fn(N)
+
     
     sq_distances = square_distances(positions[centers], positions[others])
     mask = sq_distances <= (cutoff**2)
@@ -258,9 +258,10 @@ def make_squared_distance(cell):
     return vmap(lambda Ra, Rb: squared_distance(displacement(cell, Ra, Rb)))
 
 
-def cell_list(cell, cutoff, buffer_size_multiplier=1.25):
+def cell_list(cell, cutoff, buffer_size_multiplier=1.25, bin_size_multiplier=1):
 
     cell = jnp.array(cell)
+    cutoff *= bin_size_multiplier
     def allocate_fn(positions, extra_capacity=0):
         # This function is not jittable, we're determining shapes
         N = positions.shape[0]
@@ -276,7 +277,7 @@ def cell_list(cell, cutoff, buffer_size_multiplier=1.25):
 
         hash_multipliers = compute_hash_constants(cells_per_side)
         particle_id = iota(jnp.int32, N)
-        indices = jnp.array(jnp.floor(jnp.dot(move_to_cell(positions, cell), jnp.linalg.inv(cell_size).T)), dtype=jnp.int32)
+        indices = jnp.array(jnp.floor(jnp.dot(wrap(cell, positions), inverse(cell_size).T)), dtype=jnp.int32)
         hashes = jnp.sum(indices * hash_multipliers, axis=1, dtype=jnp.int32)
 
         sort_map = jnp.argsort(hashes)
@@ -297,24 +298,28 @@ def cell_list(cell, cutoff, buffer_size_multiplier=1.25):
     def update_fn(positions, old_cell_list, new_cell):
         # this is jittable,
         # CellList tells us all the shapes we need
+        # If cell size is lower than cutoff, we need to reallocate cell list
+        # Rellocate is not jitable, we're changing shapes
+        # So, after each update we need to check if we need to reallocate
         N = positions.shape[0]
         dim = positions.shape[1]
-
-        _, cell_size, cells_per_side, _ = cell_dimensions(new_cell, cutoff)
+        cell_size = jnp.divide(new_cell, cutoff)
         max_occupancy = estimate_cell_capacity(positions, new_cell, cell_size, 1)
+
+        # Checking if update or reallocate
+        reallocate = jnp.all(get_heights(cell_size).any() >= cutoff) & (max_occupancy <= old_cell_list.capacity)
+
         def update(positions, old_cell_list, new_cell):
-            cell_capacity = old_cell_list.capacity
-            overflow = old_cell_list.overflow
-            hash_multipliers = compute_hash_constants(cells_per_side)
-            indices = jnp.array(jnp.floor(jnp.dot(move_to_cell(positions, new_cell), jnp.linalg.inv(cell_size).T)), dtype=jnp.int32)
+            hash_multipliers = compute_hash_constants(old_cell_list.cells_per_side)
+            indices = jnp.array(jnp.floor(jnp.dot(wrap(new_cell, positions), inverse(cell_size).T)), dtype=jnp.int32)
             hashes = jnp.sum(indices * hash_multipliers, axis=1, dtype=jnp.int32)
             particle_id = iota(jnp.int32, N)
             sort_map = jnp.argsort(hashes)
             sorted_hash = hashes[sort_map]
             sorted_id = particle_id[sort_map]
 
-            sorted_cell_id = jnp.mod(iota(jnp.int32, N), cell_capacity)
-            sorted_cell_id = sorted_hash * cell_capacity + sorted_cell_id
+            sorted_cell_id = jnp.mod(iota(jnp.int32, N), old_cell_list.capacity)
+            sorted_cell_id = sorted_hash * old_cell_list.capacity + sorted_cell_id
             sorted_id = jnp.reshape(sorted_id, (N, 1))
             cell_id = N * jnp.ones((old_cell_list.id.reshape(-1, 1).shape), dtype=jnp.int32)
             cell_id = cell_id.at[sorted_cell_id].set(sorted_id)
@@ -324,37 +329,32 @@ def cell_list(cell, cutoff, buffer_size_multiplier=1.25):
                 cell_id, cells_per_side, dim = input
                 return  unflatten_cell_buffer(cell_id, cells_per_side, dim)
 
-            cell_id = jax.pure_callback(get_cell_id, old_cell_list.id, [cell_id, cells_per_side, dim])
-            overflow = jnp.array(False)
+            cell_id = jax.pure_callback(get_cell_id, old_cell_list.id, [cell_id, old_cell_list.cells_per_side, dim])
 
-            return CellList(cell_id, overflow, cell_capacity, cell_size, cells_per_side)
+            return CellList(cell_id, False, old_cell_list.capacity, cell_size, old_cell_list.cells_per_side)
         
         # In case cell size is lower than cutoff, we need to reallocate 
-        def need_reallocate(_, old_cell_list, __):
-            return CellList(old_cell_list.id, True, old_cell_list.capacity, old_cell_list.size, old_cell_list.cells_per_side)
-        return cond(((jnp.all(cells_per_side == old_cell_list.cells_per_side)) & (max_occupancy <= old_cell_list.capacity)),
-             update,
-             need_reallocate, 
-             positions, old_cell_list, new_cell)
+        def need_reallocate(_ ,old_cell_list, __):
+            return CellList(old_cell_list.id, True, old_cell_list.capacity, cell_size, old_cell_list.cells_per_side)
+        return cond(reallocate, need_reallocate, update, positions, old_cell_list, new_cell)
     return allocate_fn, update_fn 
 
 
 def estimate_cell_capacity(positions, cell, cell_size, buffer_size_multiplier):
-    cell_capacity = jnp.max(count_cell_filling(positions, cell, cell_size))
+    minimum_cell_size = jnp.min(get_heights(cell_size))
+    cell_capacity = jnp.max(count_cell_filling(positions, cell, minimum_cell_size))
     return (cell_capacity * buffer_size_multiplier).astype(jnp.int32)
 
 def cell_dimensions(cell, cutoff):
     """Compute the number of cells-per-side and total number of cells in a box."""
     # Considering cell is 3x3 array
-    cells_per_side = jnp.floor(cell / cutoff)
-    cells_per_side = jnp.nan_to_num(cells_per_side)
-    cell_size = jnp.where(cells_per_side != 0,cell / cells_per_side, cell)
-    cells_per_side = jnp.amax(cells_per_side, axis=1, keepdims=True)
-    flat_cells_per_side = jnp.reshape(cells_per_side, (-1,))
-    cell_count = 1
-    for cells in flat_cells_per_side:
-        cell_count *= cells
+    # Transform into reciprocal space to get the cell size whatever cell is
+    face_dist = get_heights(cell)
+    cells_per_side = jnp.floor(face_dist / cutoff).astype(jnp.int32)
+    cell_size = jnp.where(cells_per_side != 0, cell / cells_per_side, cell)
+    cell_count = jnp.prod(cells_per_side)
     return cell, cell_size, cells_per_side, cell_count.astype(jnp.int32)
+
     
 def count_cell_filling(position, cell, minimum_cell_size):
     """
@@ -362,22 +362,22 @@ def count_cell_filling(position, cell, minimum_cell_size):
     """
     cell, cell_size, cells_per_side, _ = cell_dimensions(cell, minimum_cell_size)
     hash_multipliers = compute_hash_constants(cells_per_side)
-    particle_index = jnp.array(jnp.floor(jnp.dot(position, jnp.linalg.inv(cell_size.T).T)), dtype=jnp.int32)
+    particle_index = jnp.array(jnp.floor(jnp.dot(position, inverse(cell_size.T).T)), dtype=jnp.int32)
     particle_hash = jnp.sum(particle_index * hash_multipliers, axis=1)
     filling = jnp.zeros_like(particle_hash, dtype=jnp.int32) # jnp.zeros((cell_count,), dtype=jnp.int32)
     filling = filling.at[particle_hash].add(1)
     return filling
 
 def compute_hash_constants(cells_per_side):
-    one = jnp.array([[1]])
-    cells_per_side = jnp.concatenate((one, cells_per_side[:-1].T), axis=1)
+    one = jnp.array([1])
+    cells_per_side = jnp.concatenate((one, cells_per_side[:-1]), axis=0)
     return jnp.array(jnp.cumprod(cells_per_side), dtype=jnp.int32)
 
 def unflatten_cell_buffer(arr, cells_per_side, dim):
     if not cells_per_side.shape:
         cells_per_side = (int(cells_per_side),) * dim
     elif len(cells_per_side.shape) <= 2:
-        cells_per_side = tuple([x.astype(jnp.int32)for x in cells_per_side.flatten()])
+        cells_per_side = tuple(cells_per_side)
     return jnp.reshape(arr, cells_per_side + (-1,) + arr.shape[1:])
 
 def neighboring_cells(dimension):
@@ -410,5 +410,9 @@ def shift_array(arr, dindex):
 
     return arr
 
-def move_to_cell(positions, cell):
-    return jnp.dot(jnp.mod(jnp.dot(positions, jnp.linalg.inv(cell).T), 1.0), cell)
+
+# I had to include it for reallocate cell list, calling cell_list allocate not jitable
+def check_reallocation_cell_list(cell_list, allocate_fn, positions):
+    if cell_list.reallocate:
+        return allocate_fn(positions)
+    return cell_list
