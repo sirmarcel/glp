@@ -145,9 +145,8 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, use_ce
             new_cell = stop_gradient(new_cell)
 
         N = positions.shape[0]
-
-        cl = cl_allocate(positions) if cl_allocate is not None else None
-
+        positions = wrap(new_cell, positions) if new_cell is not None else positions
+        cl = cl_allocate(positions)  if cl_allocate is not None else None
         centers, others, sq_distances, mask, hits = get_neighbors(
             positions,
             make_squared_distance(new_cell),
@@ -155,7 +154,6 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, use_ce
             padding_mask=padding_mask,
             cl=cl
         )
-        # Hits estan mal. el numero es demasiado grande
         size = int(hits.item() * capacity_multiplier + 1)
         centers, _ = boolean_mask_1d(centers, mask, size, N)
         others, overflow = boolean_mask_1d(others, mask, size, N)
@@ -174,9 +172,10 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, use_ce
         
         N = positions.shape[0]
         dim = positions.shape[1]
+        positions = wrap(new_cell, positions) if new_cell is not None else positions
         size = neighbors.centers.shape[0]
         def update(positions, cell, padding_mask, cl=neighbors.cell_list):
-            cl = cl_update(positions, cl, cell) if cl_update is not None else None
+            cl = cl_update(positions, cl, new_cell)  if cl_update is not None else None
             centers, others, sq_distances, mask, hits = get_neighbors(
                 positions,
                 make_squared_distance(cell),
@@ -186,7 +185,6 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, use_ce
             )
             centers, _ = boolean_mask_1d(centers, mask, size, N)
             others, overflow = boolean_mask_1d(others, mask, size, N)
-
             overflow = overflow | cell_too_small(cell)
 
             return Neighbors(centers, others, overflow, positions, cl)
@@ -216,7 +214,6 @@ def candidates_fn(n):
 
 def cell_list_candidate_fn(cell_id, N, dim):
     idx = cell_id
-
     cell_idx = [idx] * (dim**3)
     for i, dindex in enumerate(neighboring_cells(dim)):
         cell_idx[i] = shift_array(idx, dindex)
@@ -232,7 +229,6 @@ def cell_list_candidate_fn(cell_id, N, dim):
     neighbor_idx = copy_values_from_cell(neighbor_idx, cell_idx, idx)
     others = jnp.reshape(neighbor_idx[:-1, :, 0], (-1,))
     centers = jnp.repeat(jnp.arange(0, N), others.shape[0] // N)
-    print(others.shape, centers.shape)
     return centers, others
 
 def get_neighbors(positions, square_distances, cutoff, padding_mask=None, cl=None):
@@ -277,7 +273,10 @@ def cell_list(cell, cutoff, buffer_size_multiplier=1.25, bin_size_multiplier=1):
 
         hash_multipliers = compute_hash_constants(cells_per_side)
         particle_id = iota(jnp.int32, N)
-        indices = jnp.array(jnp.floor(jnp.dot(wrap(cell, positions), inverse(cell_size).T)), dtype=jnp.int32)
+        indices = jnp.array(jnp.floor(positions @ inverse(cell_size).T), dtype=jnp.int32)
+        # Some particles are in the edge and might have negative indices or larger than cells_per_side
+        # We need to correct them wrapping into cell per side vector
+        indices = wrap(jnp.diag(cells_per_side), indices)
         hashes = jnp.sum(indices * hash_multipliers, axis=1, dtype=jnp.int32)
 
         sort_map = jnp.argsort(hashes)
@@ -309,9 +308,12 @@ def cell_list(cell, cutoff, buffer_size_multiplier=1.25, bin_size_multiplier=1):
         # Checking if update or reallocate
         reallocate = jnp.all(get_heights(cell_size).any() >= cutoff) & (max_occupancy <= old_cell_list.capacity)
 
-        def update(positions, old_cell_list, new_cell):
+        def update(positions, old_cell_list):
             hash_multipliers = compute_hash_constants(old_cell_list.cells_per_side)
-            indices = jnp.array(jnp.floor(jnp.dot(wrap(new_cell, positions), inverse(cell_size).T)), dtype=jnp.int32)
+            indices = jnp.array(jnp.floor(positions @ inverse(cell_size).T), dtype=jnp.int32)
+            # Some particles are in the edge and might have negative indices or larger than cells_per_side
+            # We need to correct them wrapping into cell per side vector
+            indices = wrap(jnp.diag(old_cell_list.cells_per_side), indices)
             hashes = jnp.sum(indices * hash_multipliers, axis=1, dtype=jnp.int32)
             particle_id = iota(jnp.int32, N)
             sort_map = jnp.argsort(hashes)
@@ -331,12 +333,12 @@ def cell_list(cell, cutoff, buffer_size_multiplier=1.25, bin_size_multiplier=1):
 
             cell_id = jax.pure_callback(get_cell_id, old_cell_list.id, [cell_id, old_cell_list.cells_per_side, dim])
 
-            return CellList(cell_id, False, old_cell_list.capacity, cell_size, old_cell_list.cells_per_side)
+            return CellList(cell_id, old_cell_list.reallocate, old_cell_list.capacity, cell_size, old_cell_list.cells_per_side)
         
         # In case cell size is lower than cutoff, we need to reallocate 
-        def need_reallocate(_ ,old_cell_list, __):
+        def need_reallocate(_ ,old_cell_list):
             return CellList(old_cell_list.id, True, old_cell_list.capacity, cell_size, old_cell_list.cells_per_side)
-        return cond(reallocate, need_reallocate, update, positions, old_cell_list, new_cell)
+        return cond(reallocate, need_reallocate, update, positions, old_cell_list)
     return allocate_fn, update_fn 
 
 
@@ -377,7 +379,7 @@ def unflatten_cell_buffer(arr, cells_per_side, dim):
     if not cells_per_side.shape:
         cells_per_side = (int(cells_per_side),) * dim
     elif len(cells_per_side.shape) <= 2:
-        cells_per_side = tuple(cells_per_side)
+        cells_per_side = tuple([x for x in cells_per_side])
     return jnp.reshape(arr, cells_per_side + (-1,) + arr.shape[1:])
 
 def neighboring_cells(dimension):
