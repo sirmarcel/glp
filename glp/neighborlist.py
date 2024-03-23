@@ -259,7 +259,6 @@ def cell_list(cell, cutoff, buffer_size_multiplier=1.25, bin_size_multiplier=1):
     def allocate_fn(positions, extra_capacity=0):
         # This function is not jittable, we're determining shapes
         N = positions.shape[0]
-        dim = positions.shape[1]
         _, cell_size, cells_per_side, cell_count = cell_dimensions(cell, cutoff)
         cell_capacity = estimate_cell_capacity(positions, cell, cell_size,
                                             buffer_size_multiplier)
@@ -274,7 +273,7 @@ def cell_list(cell, cutoff, buffer_size_multiplier=1.25, bin_size_multiplier=1):
         indices = jnp.array(jnp.floor(positions @ inverse(cell_size).T), dtype=jnp.int32)
         # Some particles are in the edge and might have negative indices or larger than cells_per_side
         # We need to correct them wrapping into cell per side vector
-        indices = wrap(jnp.diag(cells_per_side), indices)
+        indices = wrap(jnp.diag(cells_per_side), indices).astype(jnp.int32)
         hashes = jnp.sum(indices * hash_multipliers, axis=1, dtype=jnp.int32)
 
         sort_map = jnp.argsort(hashes)
@@ -285,11 +284,10 @@ def cell_list(cell, cutoff, buffer_size_multiplier=1.25, bin_size_multiplier=1):
         sorted_cell_id = sorted_hash * cell_capacity + sorted_cell_id
         sorted_id = jnp.reshape(sorted_id, (N, 1))
         cell_id = cell_id.at[sorted_cell_id].set(sorted_id)
-        cell_id = unflatten_cell_buffer(cell_id, cells_per_side, dim)
+        cell_id = unflatten_cell_buffer(cell_id, cells_per_side)
         occupancy = ops.segment_sum(jnp.ones_like(hashes), hashes, cell_count)
         max_occupancy = jnp.max(occupancy)
         overflow = overflow | (max_occupancy > cell_capacity)
-
         return CellList(cell_id, overflow, cell_capacity, cell_size, cells_per_side)
     
     def update_fn(positions, old_cell_list, new_cell):
@@ -299,10 +297,9 @@ def cell_list(cell, cutoff, buffer_size_multiplier=1.25, bin_size_multiplier=1):
         # Rellocate is not jitable, we're changing shapes
         # So, after each update we need to check if we need to reallocate
         N = positions.shape[0]
-        dim = positions.shape[1]
-        cell_size = jnp.divide(new_cell, cutoff)
-        max_occupancy = estimate_cell_capacity(positions, new_cell, cell_size, 1)
 
+        cell_size = jnp.where(old_cell_list.cells_per_side != 0, cell / old_cell_list.cells_per_side, cell)
+        max_occupancy = estimate_cell_capacity(positions, new_cell, cell_size, 1)
         # Checking if update or reallocate
         reallocate = jnp.all(get_heights(cell_size).any() >= cutoff) & (max_occupancy <= old_cell_list.capacity)
 
@@ -311,7 +308,8 @@ def cell_list(cell, cutoff, buffer_size_multiplier=1.25, bin_size_multiplier=1):
             indices = jnp.array(jnp.floor(positions @ inverse(cell_size).T), dtype=jnp.int32)
             # Some particles are in the edge and might have negative indices or larger than cells_per_side
             # We need to correct them wrapping into cell per side vector
-            indices = wrap(jnp.diag(old_cell_list.cells_per_side), indices)
+            indices = wrap(jnp.diag(old_cell_list.cells_per_side), indices).astype(jnp.int32)
+            
             hashes = jnp.sum(indices * hash_multipliers, axis=1, dtype=jnp.int32)
             particle_id = iota(jnp.int32, N)
             sort_map = jnp.argsort(hashes)
@@ -325,12 +323,8 @@ def cell_list(cell, cutoff, buffer_size_multiplier=1.25, bin_size_multiplier=1):
             cell_id = cell_id.at[sorted_cell_id].set(sorted_id)
 
             # This is not jitable, we're changing shapes. It's a fix for the unflatten_cell_buffer.
-            def get_cell_id(input):
-                cell_id, cells_per_side, dim = input
-                return  unflatten_cell_buffer(cell_id, cells_per_side, dim)
-
-            cell_id = jax.pure_callback(get_cell_id, old_cell_list.id, [cell_id, old_cell_list.cells_per_side, dim])
-
+            
+            cell_id = jax.pure_callback(unflatten_cell_buffer, old_cell_list.id, cell_id, old_cell_list.cells_per_side)
             return CellList(cell_id, old_cell_list.reallocate, old_cell_list.capacity, cell_size, old_cell_list.cells_per_side)
         
         # In case cell size is lower than cutoff, we need to reallocate 
@@ -373,18 +367,16 @@ def compute_hash_constants(cells_per_side):
     cells_per_side = jnp.concatenate((one, cells_per_side[:-1]), axis=0)
     return jnp.array(jnp.cumprod(cells_per_side), dtype=jnp.int32)
 
-def unflatten_cell_buffer(arr, cells_per_side, dim):
-    if not cells_per_side.shape:
-        cells_per_side = (int(cells_per_side),) * dim
-    elif len(cells_per_side.shape) <= 2:
-        cells_per_side = tuple([x for x in cells_per_side])
+def unflatten_cell_buffer(arr, cells_per_side):
+    cells_per_side = tuple(cells_per_side)
     return jnp.reshape(arr, cells_per_side + (-1,) + arr.shape[1:])
 
 def neighboring_cells(dimension):
   for dindex in np.ndindex(*([3] * dimension)):
     yield jnp.array(dindex) - 1
 
-   
+
+
 def shift_array(arr, dindex):
     dx, dy, dz = tuple(dindex) + (0,) * (3 - len(dindex))
     arr = cond(dx < 0,
