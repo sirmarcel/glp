@@ -145,7 +145,6 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, use_ce
             new_cell = stop_gradient(new_cell)
 
         N = positions.shape[0]
-        positions = wrap(new_cell, positions) if new_cell is not None else positions
         cl = cl_allocate(positions)  if cl_allocate is not None else None
         centers, others, sq_distances, mask, hits = get_neighbors(
             positions,
@@ -172,7 +171,6 @@ def quadratic_neighbor_list(cell, cutoff, skin, capacity_multiplier=1.25, use_ce
         
         N = positions.shape[0]
         dim = positions.shape[1]
-        positions = wrap(new_cell, positions) if new_cell is not None else positions
         size = neighbors.centers.shape[0]
         def update(positions, cell, padding_mask, cl=neighbors.cell_list):
             cl = cl_update(positions, cl, new_cell)  if cl_update is not None else None
