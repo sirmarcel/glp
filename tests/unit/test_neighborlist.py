@@ -8,7 +8,7 @@ from time import monotonic
 from ase.build import bulk
 
 
-from glp.neighborlist import quadratic_neighbor_list, neighbor_list
+from glp.neighborlist import quadratic_neighbor_list, neighbor_list, check_reallocation_cell_list
 from glp.system import atoms_to_system, unfold_system
 from glp.graph import system_to_graph
 from glp.unfold import unfolder
@@ -43,10 +43,11 @@ def get_distances(graph):
 
 
 class TestNeighborList(TestCase):
+    # Checking cell list
     def test_basic(self):
         cutoff = 5.0
         skin = 0.5
-        atoms = bulk("Ar", cubic=False) * [5, 5, 5]
+        atoms = bulk("Ar", cubic=False) * [7, 7, 7]
 
         system = atoms_to_system(atoms)
 
@@ -134,12 +135,11 @@ class TestNeighborList(TestCase):
         cutoff = 5.0
         skin = 0.5
         spread = 0.5
-        atoms = bulk("Ar", cubic=False) * [5, 5, 5]
-
+        atoms = bulk("Ar", cubic=False) * [7, 7, 7]
         system = atoms_to_system(atoms)
 
         allocate, update, need_update = quadratic_neighbor_list(
-            system.cell, cutoff, skin, debug=True, capacity_multiplier=1.5
+            system.cell, cutoff, skin, debug=True, capacity_multiplier=1.5, use_cell_list=True
         )
         neighbors = allocate(system.R)
         neighbors = update(system.R, neighbors)
@@ -172,7 +172,7 @@ class TestNeighborList(TestCase):
     def test_jit_high_level_interface(self):
         cutoff = 5.0
         skin = 0.5
-        atoms = bulk("Ar", cubic=True) * [5, 5, 5]
+        atoms = bulk("Ar", cubic=True) * [7, 7, 7]
 
         system = atoms_to_system(atoms)
 
@@ -209,7 +209,7 @@ class TestNeighborList(TestCase):
 
         cutoff = 5.0
         skin = 0.5
-        atoms = bulk("Ar", cubic=True) * [5, 5, 5]
+        atoms = bulk("Ar", cubic=True) * [7, 7, 7]
 
         system = atoms_to_system(atoms)
 
